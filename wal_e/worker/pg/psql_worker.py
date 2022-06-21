@@ -80,6 +80,8 @@ class PgBackupStatements(object):
     """
 
     _WAL_NAME = None  # Lazy set to 'wal' or 'xlog' depending on version
+    _BACKUP_START_FUNC = None
+    _BACKUP_FINISH_FUNC = None
 
     @staticmethod
     def _dict_transform(csv_reader):
@@ -97,13 +99,40 @@ class PgBackupStatements(object):
 
         """
         if cls._WAL_NAME is None:
-            version = cls._dict_transform(psql_csv_run(
-                    "SELECT current_setting('server_version_num')"))
+            version = cls.server_version_num()
             if int(version['current_setting']) >= 100000:
                 cls._WAL_NAME = 'wal'
             else:
                 cls._WAL_NAME = 'xlog'
         return cls._WAL_NAME
+
+    @classmethod
+    def _backup_start_function(cls):
+        """
+        TODO: add description
+
+        """
+        if cls._BACKUP_START_FUNC is None:
+            version = cls.server_version_num()
+            if int(version['current_setting']) >= 150000:
+                cls._BACKUP_START_FUNC = 'pg_backup_start'
+            else:
+                cls._BACKUP_START_FUNC = 'pg_start_backup'
+        return cls._BACKUP_START_FUNC
+
+    @classmethod
+    def _backup_stop_function(cls):
+        """
+        TODO: add description
+
+        """
+        if cls._BACKUP_FINISH_FUNC is None:
+            version = cls.server_version_num()
+            if int(version['current_setting']) >= 150000:
+                cls._BACKUP_FINISH_FUNC = 'pg_backup_stop'
+            else:
+                cls._BACKUP_FINISH_FUNC = 'pg_stop_backup'
+        return cls._BACKUP_FINISH_FUNC
 
     @classmethod
     def run_start_backup(cls):
@@ -129,7 +158,7 @@ class PgBackupStatements(object):
                 "SELECT file_name, "
                 "  lpad(file_offset::text, 8, '0') AS file_offset "
                 "FROM pg_{0}file_name_offset("
-                "  pg_start_backup('{1}'))".format(cls._wal_name(), label),
+                "  {1}('{2}'))".format(cls._wal_name(), cls._backup_start_function(), label),
                 error_handler=handler))
 
     @classmethod
@@ -149,7 +178,7 @@ class PgBackupStatements(object):
                 "SELECT file_name, "
                 "  lpad(file_offset::text, 8, '0') AS file_offset "
                 "FROM pg_{0}file_name_offset("
-                "  pg_stop_backup())".format(cls._wal_name()),
+                "  {1}())".format(cls._wal_name(), cls._backup_stop_function()),
                 error_handler=handler))
 
     @classmethod
@@ -162,3 +191,12 @@ class PgBackupStatements(object):
 
         """
         return cls._dict_transform(psql_csv_run('SELECT * FROM version()'))
+
+    @classmethod
+    def server_version_num(cls):
+        """
+        TODO: add description
+
+        """
+        return cls._dict_transform(psql_csv_run(
+            "SELECT current_setting('server_version_num')"))
