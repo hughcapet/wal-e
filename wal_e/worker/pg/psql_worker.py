@@ -89,6 +89,12 @@ class PgBackupStatements(object):
         assert len(rows) == 2, 'Expect header row and data row'
         return dict(list(zip(*rows)))
 
+    @staticmethod
+    def _server_version(cls):
+        res = cls._dict_transform(psql_csv_run(
+            "SELECT current_setting('server_version_num')"))
+        return int(res['current_setting'])
+
     @classmethod
     def _wal_name(cls):
         """
@@ -99,7 +105,7 @@ class PgBackupStatements(object):
 
         """
         if cls._WAL_NAME is None:
-            version = cls.server_version_num()
+            version = cls._server_version()
             if int(version['current_setting']) >= 100000:
                 cls._WAL_NAME = 'wal'
             else:
@@ -109,12 +115,15 @@ class PgBackupStatements(object):
     @classmethod
     def _backup_start_function(cls):
         """
-        TODO: add description
+        Sets and returns _BACKUP_START_FUNC name depending on the
+        version of postgres we are working with.
+
+        It is used for handling pg_start_backup->pg_backup_start
+        rename in postgres v15
 
         """
         if cls._BACKUP_START_FUNC is None:
-            version = cls.server_version_num()
-            if int(version['current_setting']) >= 150000:
+            if cls._server_version_num() >= 150000:
                 cls._BACKUP_START_FUNC = 'pg_backup_start'
             else:
                 cls._BACKUP_START_FUNC = 'pg_start_backup'
@@ -123,12 +132,15 @@ class PgBackupStatements(object):
     @classmethod
     def _backup_stop_function(cls):
         """
-        TODO: add description
+        Sets and returns _BACKUP_START_FUNC name depending on the
+        version of postgres we are working with.
+
+        It is used for handling pg_stop_backup->pg_backup_stop
+        rename in postgres v15
 
         """
         if cls._BACKUP_FINISH_FUNC is None:
-            version = cls.server_version_num()
-            if int(version['current_setting']) >= 150000:
+            if cls._server_version() >= 150000:
                 cls._BACKUP_FINISH_FUNC = 'pg_backup_stop'
             else:
                 cls._BACKUP_FINISH_FUNC = 'pg_stop_backup'
@@ -191,12 +203,3 @@ class PgBackupStatements(object):
 
         """
         return cls._dict_transform(psql_csv_run('SELECT * FROM version()'))
-
-    @classmethod
-    def server_version_num(cls):
-        """
-        TODO: add description
-
-        """
-        return cls._dict_transform(psql_csv_run(
-            "SELECT current_setting('server_version_num')"))
